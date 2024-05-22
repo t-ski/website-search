@@ -1,0 +1,48 @@
+{
+    "name": "@t-ski/site-search",
+    "version": "0.1.0",
+    "description": "",
+    "author": "",
+    "homepage": "https://github.com/rapidjs.org/<NAME>#readme",
+    "keywords": [],
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/rapidjs.org/<NAME>.git"
+    },
+    "bugs": {
+        "url": "https://github.com/rapidjs.org/<NAME>/issues"
+    },
+    "main": "./build/api.js",
+    "types": "./types/api.d.ts",
+    "files": [
+        "./build/",
+        "./types/"
+    ],
+    "scripts": {
+        "prepare": "npx husky install",
+        "compile": "npx tsc --project ./tsconfig.debug.json",
+        "compile:watch": "npm run compile -- --watch",
+        "build": "rm -rf ./build/ && rm -rf ./types/ && npx tsc --project ./tsconfig.build.json",
+        "lint": "npx eslint ./src/*.ts",
+        "lint:fix": "npx eslint --fix ./src/*.ts",
+        "format": "npx prettier --check ./src/*.ts",
+        "format:fix": "npx prettier --write ./src/**/*.ts",
+        "test": "npx rjs:test unit ./test/"
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.2.0",
+        "@types/node": "^20.10.6",
+        "@typescript-eslint/eslint-plugin": "^7.8.0",
+        "@typescript-eslint/parser": "^7.8.0",
+        "eslint": "^8.57.0",
+        "eslint-plugin-typescript": "^0.14.0",
+        "husky": "^9.0.11",
+        "lint-staged": "^15.2.2",
+        "prettier": "^3.2.5",
+        "typescript": "^5.3.3",
+        "typescript-eslint": "^7.8.0"
+    },
+    "dependencies": {
+        "node-html-parser": "^6.1.13"
+    }
+}
