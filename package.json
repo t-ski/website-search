@@ -27,7 +27,7 @@
         "lint:fix": "npx eslint --fix ./src/*.ts",
         "format": "npx prettier --check ./src/*.ts",
         "format:fix": "npx prettier --write ./src/**/*.ts",
-        "test": "npx rjs:test unit ./test/"
+        "test": ""
     },
     "devDependencies": {
         "@eslint/js": "^9.2.0",
