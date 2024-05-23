@@ -1,5 +1,5 @@
 {
-    "name": "@t-ski/site-search",
+    "name": "@t-ski/website-search",
     "version": "0.1.0",
     "description": "",
     "author": "",
@@ -27,7 +27,7 @@
         "lint:fix": "npx eslint --fix ./src/*.ts",
         "format": "npx prettier --check ./src/*.ts",
         "format:fix": "npx prettier --write ./src/**/*.ts",
-        "test": ""
+        "test": "node ./test/website-search.test.js"
     },
     "devDependencies": {
         "@eslint/js": "^9.2.0",

@@ -1,9 +1,11 @@
 import { Dirent, readdir, readFileSync, statSync } from "fs";
 import { resolve as resolvePath, join } from "path";
-import { HTMLTextParser, IParserOptions, ITextNode } from "./HTMLTextParser";
-import { OptionReader } from "./OptionReader";
 
-type TDocument = string;
+import { TDocument, TToken, TTokenIndex } from "./types";
+import { IIndexing } from "./interface";
+import { OptionReader } from "./OptionReader";
+import { Cache } from "./Cache";
+import { HTMLTextParser, IParserOptions, ITextNode } from "./HTMLTextParser";
 
 interface IIndexOptions {
 	minTokenLength?: number;
@@ -12,25 +14,19 @@ interface IIndexOptions {
 	relevantFileExtensions?: string[];
 }
 
-interface IIndexing {
-	[document: TDocument]: number; // freq(document)
-}
-
-export type TRanking = {
-	document: TDocument;
-	score: number;
-}[];
-
 export class InvertedIndex extends OptionReader<IIndexOptions> {
 	private readonly rootPath: string;
-	private readonly documentLength: Map<TDocument, number> = new Map();
+	private readonly documentLengths: Map<TDocument, number> = new Map();
 	private readonly indexing: { [term: string]: IIndexing } = {};
+
+	public readonly tokenCache = new Cache();
+	public readonly resultsCache = new Cache();
 
 	constructor(path: string, options: IIndexOptions = {}) {
 		super(
 			{
 				minTokenLength: 3,
-				punctuationChars: [".", ",", ":", ";", "!", "?", '"', "'"],
+				punctuationChars: [".", ",", ":", ";", "!", "?", '"', "'", "(", ")", "{", "}", "[", "]"],
 				relevantFileExtensions: ["html", "htm", "txt"]
 			},
 			options
@@ -75,21 +71,67 @@ export class InvertedIndex extends OptionReader<IIndexOptions> {
 	}
 
 	private indexDocument(document: TDocument) {
+		let scopeIndex: number = 0;
 		new HTMLTextParser(this.options.parserOptions)
 			.parse(readFileSync(join(this.rootPath, document)).toString())
 			.forEach((textNode: ITextNode) => {
 				const tokens: string[] = this.tokenize(textNode.content);
 
-				this.documentLength.set(document, tokens.length);
+				this.documentLengths.set(document, tokens.length);
 
-				tokens.forEach((token: string) => {
+				tokens.forEach((token: string, tokenIndex: TTokenIndex) => {
 					this.indexing[token] = this.indexing[token] ?? {};
-					this.indexing[token][document] = (this.indexing[token][document] ?? 0) + 1;
+					this.indexing[token][document] = (this.indexing[token][document] ?? [])
+						.concat([scopeIndex + tokenIndex])
+						.flat();
 				});
+
+				scopeIndex += tokens.length;
 			});
 	}
 
-	private tokenize(text: string): string[] {
+	private levenshteinDistance(token1: TToken, token2: TToken) {
+		if (token1 === token2) return 0;
+		if (!token1.length || !token2.length) {
+			return token1.length + token2.length;
+		}
+
+		const row = [];
+
+		let i = 0;
+		while (i < token1.length) {
+			row[i] = ++i;
+		}
+
+		let curDistance, prevDistance, col1, col2;
+		let j = 0;
+		while (j < token2.length) {
+			col2 = token2.charCodeAt(j);
+
+			prevDistance = j;
+			curDistance = ++j;
+
+			for (i = 0; i < token1.length; ++i) {
+				col1 = prevDistance + (token1.charCodeAt(i) === col2 ? 0 : 1);
+
+				prevDistance = row[i];
+				curDistance =
+					curDistance < prevDistance
+						? curDistance < col1
+							? curDistance + 1
+							: col1
+						: prevDistance < col1
+							? prevDistance + 1
+							: col1;
+
+				row[i] = curDistance;
+			}
+		}
+
+		return curDistance;
+	}
+
+	public tokenize(text: string): TToken[] {
 		return text
 			.split(/\s+/g)
 			.map((token: string) =>
@@ -111,30 +153,37 @@ export class InvertedIndex extends OptionReader<IIndexOptions> {
 		return this;
 	}
 
-	public query(token: string, max: number): TRanking;
-	public query(tokens: string[], max: number): TRanking;
-	public query(arg: string | string[], max: number = 5): TRanking {
-		const tokens: string[] = [arg].flat();
-
-		const ranking: TRanking = [];
-
-		const idf = Math.log(Object.keys(this.indexing[tokens[0]] ?? {}).length / this.documentLength.size + 1);
-
-		for (const document in this.indexing[tokens[0]]) {
-			const tf =
-				Math.log2(1 + ((this.indexing[tokens[0]] ?? {})[document] ?? 0)) /
-				Math.log2(Math.max(2, this.documentLength.get(document)));
-
-			ranking.push({
-				document,
-				score: tf * idf
-			});
-		}
-
-		return ranking.sort((a, b) => b.score - a.score).slice(0, max);
+	public indexedTokens(preciseToken: TToken, maxLevenshteinDistance: number = 0): TToken[] {
+		return Object.keys(this.indexing)
+			.map(
+				(
+					token: TToken
+				): {
+					token: TToken;
+					distance: number;
+				} => {
+					return {
+						token,
+						distance: this.levenshteinDistance(token, preciseToken)
+					};
+				}
+			)
+			.sort((a, b) => a.distance - b.distance)
+			.filter((entry) => entry.distance <= maxLevenshteinDistance)
+			.map((entry) => entry.token); // Ordered by proximity (integral steps)
 	}
 
-	// TODO: Similarity sort for neighbouring search
+	public tokenIndexing(token: TToken): IIndexing {
+		return this.indexing[token] ?? {};
+	}
+
+	public documentLength(document: TDocument): number {
+		return this.documentLengths.get(document);
+	}
+
+	public documentAmount(): number {
+		return this.documentLengths.size;
+	}
 
 	public toString(): string {
 		return `Index ${JSON.stringify(this.indexing, null, 2)}`;
